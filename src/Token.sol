@@ -1,39 +1,64 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+
 
 contract LrlBtht is ERC20, Ownable {
-    uint256 public totalSupply;
+    mapping(address => bool) public allowedUsers;
 
-    constructor() ERC20("LrlBtht Token", "LRBT") {
-        totalSupply = 1000000 * 10 ** uint256(decimals());
-        _mint(msg.sender, totalSupply);
+    enum Tier {One, Two, Three}
+    mapping(address => Tier) public userTiers;
+
+    constructor() ERC20("LrlBtht Token", "LRBT") Ownable(msg.sender) {
+        _mint(msg.sender, 1000000 * 10 ** uint256(decimals()));
     }
 
-    // Function to mint additional tokens (only callable by the owner)
-    function mint(address to, uint256 amount) public onlyOwner {
-        _mint(to, amount);
+    function addToAllowList(address user) public onlyOwner {
+        allowedUsers[user] = true;
+    }
+    
+    modifier onlyAllowed() {
+        require(allowedUsers[msg.sender], "You are not allowed to call this function.");
+        _;
     }
 
-    // Function to burn tokens (only callable by the owner)
-    function burn(uint256 amount) public onlyOwner {
-        _burn(msg.sender, amount);
+    function setTier(address user, Tier tier) public onlyOwner {
+        userTiers[user] = tier;
     }
 
-    // Optional: Add other custom functions or modifiers as needed
+    function getToken() external payable onlyAllowed {
+        require(msg.value > 0, "You must send some ETH to exchange for LRBT tokens");
 
-    // This function allows users to exchange 1 ETH for 1 LRBT token
-    function getToken() external payable {
-        require(msg.value == 1 ether, "You must send exactly 1 ETH to exchange for 1 LRBT token");
-        
-        // Calculate the number of tokens to mint based on the exchange rate
-        uint256 tokensToMint = 1 * 10 ** uint256(decimals());
+        uint256 tokensToMint;
+        Tier userTier = userTiers[msg.sender];
+        if (userTier == Tier.One) {
+            tokensToMint = msg.value * 1 * 10 ** uint256(decimals());
+        } else if (userTier == Tier.Two) {
+            tokensToMint = msg.value * 2 * 10 ** uint256(decimals());
+        } else if (userTier == Tier.Three) {
+            tokensToMint = msg.value * 3 * 10 ** uint256(decimals());
+        } else {
+            revert("You are not allowed to call this function.");
+        }
 
-        // Mint the tokens and transfer them to the sender
         _mint(msg.sender, tokensToMint);
     }
 
+    function airdropTokens(address[] calldata recipients, uint256[] calldata amounts) public onlyOwner {
+        require(recipients.length == amounts.length, "Arrays must have the same length");
+        
+        for (uint256 i = 0; i < recipients.length; i++) {
+            address recipient = recipients[i];
+            uint256 amount = amounts[i];
+
+            require(recipient != address(0), "Invalid recipient address");
+            require(amount > 0, "Amount must be greater than 0");
+
+            // Mint and transfer tokens to the recipient
+            _mint(recipient, amount);
+        }
+    }
 
 }
